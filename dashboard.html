@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RHC Ticker">
+<meta name="theme-color" content="#0C0D10">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="manifest" href="manifest.json">
+<title>Robinhood Chain — Token Ticker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0C0D10;
+    --surface:#15171C;
+    --surface-2:#1C1F26;
+    --line:#2A2D35;
+    --text:#EDEAE3;
+    --text-muted:#9A9CA3;
+    --accent:#E8A33D;
+    --accent-dim:#7A5A22;
+    --positive:#4FA974;
+    --negative:#C75450;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;}
+  body{
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    min-height:100vh;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+
+  .wrap{max-width:520px; margin:0 auto; padding:20px 18px 60px;}
+
+  /* header / ticker strip */
+  .head{display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;}
+  .idbox{display:flex; align-items:center; gap:9px;}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--positive); box-shadow:0 0 0 3px rgba(79,169,116,0.15);}
+  .dot.stale{background:var(--text-muted); box-shadow:none;}
+  .sym{font-family:var(--mono); font-weight:600; font-size:15px; letter-spacing:0.2px;}
+  .chain-tag{font-family:var(--sans); font-size:12px; color:var(--text-muted);}
+  .refresh-btn{
+    background:none; border:1px solid var(--line); color:var(--text-muted);
+    width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition: transform .4s ease, border-color .15s ease, color .15s ease;
+  }
+  .refresh-btn:hover{border-color:var(--accent-dim); color:var(--accent);}
+  .refresh-btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .refresh-btn.spin svg{animation: spin .7s linear infinite;}
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .subline{font-size:12px; color:var(--text-muted); margin-bottom:18px;}
+
+  /* hero */
+  .hero{padding:18px 0 14px; border-top:1px solid var(--line); border-bottom:1px solid var(--line);}
+  .price{font-family:var(--mono); font-weight:700; font-variant-numeric: tabular-nums; font-size:38px; line-height:1.1; letter-spacing:-0.5px;}
+  .price .cents{color:var(--text-muted); font-weight:500;}
+  .delta{display:inline-flex; align-items:center; gap:5px; margin-top:8px; font-family:var(--mono); font-size:13px; font-weight:500;}
+  .delta.up{color:var(--positive);}
+  .delta.down{color:var(--negative);}
+  .delta .lbl{color:var(--text-muted); font-family:var(--sans);}
+
+  /* tabs */
+  .tabs{display:flex; gap:22px; margin-top:22px; border-bottom:1px solid var(--line);}
+  .tab{
+    background:none; border:none; color:var(--text-muted); font-family:var(--sans); font-size:14px; font-weight:500;
+    padding:10px 0 12px; cursor:pointer; position:relative; border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .tab.active{color:var(--text); border-bottom-color:var(--accent);}
+  .tab:focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+
+  .panel{display:none; padding-top:18px;}
+  .panel.active{display:block;}
+
+  /* stat rows */
+  .row{display:flex; justify-content:space-between; align-items:baseline; padding:11px 0; border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .row .k{font-size:13px; color:var(--text-muted);}
+  .row .v{font-family:var(--mono); font-size:14px; font-variant-numeric: tabular-nums; text-align:right;}
+  .row .v.big{font-size:16px; font-weight:600;}
+  .row .v.accent{color:var(--accent);}
+  .row .k .pct{color:var(--text-muted); font-family:var(--mono); font-size:11px; margin-left:2px;}
+  .row .v.positive{color:var(--positive);}
+
+  .section-title{font-size:12px; color:var(--text-muted); margin:22px 0 4px; font-family:var(--sans);}
+  .section-title:first-child{margin-top:0;}
+
+  /* address chips */
+  .addr-block{margin-top:16px;}
+  .addr-row{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); gap:10px;}
+  .addr-row:last-child{border-bottom:none;}
+  .addr-row .k{font-size:12px; color:var(--text-muted); flex-shrink:0;}
+  .addr-val{
+    font-family:var(--mono); font-size:12.5px; color:var(--text); background:var(--surface-2);
+    border:1px solid var(--line); border-radius:6px; padding:6px 9px; cursor:pointer; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; max-width:220px;
+  }
+  .addr-val:active{background:var(--line);}
+  .copied-flag{font-size:11px; color:var(--positive); margin-left:6px; opacity:0; transition:opacity .2s;}
+  .copied-flag.show{opacity:1;}
+
+  /* edit form */
+  .edit-toggle{
+    background:none; border:none; color:var(--text-muted); font-size:12px; font-family:var(--sans);
+    cursor:pointer; padding:0; margin-top:14px; text-decoration:underline; text-decoration-color:var(--line);
+    text-underline-offset:3px;
+  }
+  .edit-form{display:none; margin-top:12px; gap:10px; flex-direction:column;}
+  .edit-form.open{display:flex;}
+  .edit-form label{font-size:11px; color:var(--text-muted); display:block; margin-bottom:5px;}
+  .edit-form input{
+    width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    font-family:var(--mono); font-size:13px; padding:9px 10px; border-radius:8px;
+  }
+  .edit-form input:focus-visible{outline:2px solid var(--accent); outline-offset:1px;}
+  .edit-form .actions{display:flex; gap:8px; margin-top:2px;}
+  .edit-form button{
+    font-family:var(--sans); font-size:13px; font-weight:500; padding:9px 14px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--line); background:var(--surface-2); color:var(--text);
+  }
+  .edit-form button.primary{background:var(--accent); border-color:var(--accent); color:#1a1200;}
+
+  /* status */
+  .status{padding:14px 0; font-size:13px; color:var(--text-muted); font-family:var(--sans);}
+  .status.error{color:var(--negative);}
+  .skeleton{opacity:0.5; animation: pulse 1.3s ease-in-out infinite;}
+  @keyframes pulse{ 0%,100%{opacity:.35;} 50%{opacity:.7;} }
+
+  .links a{color:var(--accent); text-decoration:none; font-size:13px;}
+  .links a:hover{text-decoration:underline;}
+
+  footer{margin-top:26px; font-size:11px; color:var(--text-muted); line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div class="idbox">
+      <span class="dot" id="liveDot"></span>
+      <span class="sym" id="symLabel">—</span>
+      <span class="chain-tag">· Robinhood Chain</span>
+    </div>
+    <button class="refresh-btn" id="refreshBtn" aria-label="Refresh">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    </button>
+  </div>
+  <div class="subline" id="updatedLine">loading…</div>
+
+  <div class="hero" id="heroBlock">
+    <div class="price skeleton" id="heroPrice">$0.00000000</div>
+    <div class="delta" id="heroDelta"><span class="lbl">24h</span> —</div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" id="tabBtnOverview" role="tab" aria-selected="true">Overview</button>
+    <button class="tab" id="tabBtnFull" role="tab" aria-selected="false">Full details</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="panel active" id="panelOverview">
+    <div class="row"><span class="k">Your balance</span><span class="v big" id="ovBalance">—</span></div>
+    <div class="row"><span class="k">Price (USD)</span><span class="v" id="ovPrice">—</span></div>
+    <div class="row"><span class="k">Total value</span><span class="v big accent" id="ovTotal">—</span></div>
+    <div class="row"><span class="k">Market cap</span><span class="v" id="ovMcap">—</span></div>
+    <div class="row"><span class="k">FDV</span><span class="v" id="ovFdv">—</span></div>
+    <div class="row"><span class="k">Pool liquidity</span><span class="v" id="ovLiq">—</span></div>
+    <div class="subline" id="ovPricedVia" style="display:none; margin-top:6px; margin-bottom:0;"></div>
+
+    <div class="section-title">Categories</div>
+    <div class="row"><span class="k">BZ <span class="pct">62.5%</span></span><span class="v" id="catBZ">—</span></div>
+    <div class="row"><span class="k">HZ <span class="pct">21%</span></span><span class="v" id="catHZ">—</span></div>
+    <div class="row"><span class="k">UZ <span class="pct">16.5%</span></span><span class="v" id="catUZ">—</span></div>
+
+    <div class="addr-block">
+      <div class="addr-row">
+        <span class="k">Wallet</span>
+        <span class="addr-val" id="ovWalletChip" tabindex="0"></span>
+      </div>
+      <div class="addr-row">
+        <span class="k">Token</span>
+        <span class="addr-val" id="ovTokenChip" tabindex="0"></span>
+      </div>
+    </div>
+
+    <button class="edit-toggle" id="editToggle">Change wallet / token</button>
+    <div class="edit-form" id="editForm">
+      <div>
+        <label for="inWallet">Wallet address</label>
+        <input id="inWallet" type="text" spellcheck="false" autocapitalize="off" autocorrect="off">
+      </div>
+      <div>
+        <label for="inToken">Token contract address (balance read from here)</label>
+        <input id="inToken" type="text" spellcheck="false" autocapitalize="off" autocorrect="off">
+      </div>
+      <div>
+        <label for="inPriceToken">Price source address (defaults to same as above — change only if that token has no DexScreener pool, e.g. a staking wrapper)</label>
+        <input id="inPriceToken" type="text" spellcheck="false" autocapitalize="off" autocorrect="off">
+      </div>
+      <div class="actions">
+        <button class="primary" id="applyBtn">Load</button>
+        <button id="resetBtn">Reset to default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FULL DETAILS -->
+  <div class="panel" id="panelFull">
+    <div id="fullContent"></div>
+  </div>
+
+  <div class="status" id="statusLine"></div>
+  <div class="status" id="fileProtoNote" style="display:none;"></div>
+
+  <footer>
+    Balance read directly from Robinhood Chain's public RPC via <code>eth_call</code>. Price and market data from DexScreener, picking the highest-liquidity pool for this token. USD figures converted to GBP live via frankfurter.app; if that's unreachable, figures fall back to USD marked with *. Numbers reflect a single pool snapshot — treat as an estimate, not a settled valuation.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const DEFAULT_WALLET = "0xd382b64cf8260adec369769cb5fbf1ae495e3863";
+  const DEFAULT_TOKEN  = "0x4BEF5C76A50bc68f63B8E2628CDB3b33cB445934"; // staked NUKE
+  // If the balance token itself has no DexScreener pair (common for staking/vault
+  // wrappers), price is looked up against this token instead. Defaults to the
+  // same address; override via the edit form if the staked token has no pool.
+  const DEFAULT_PRICE_TOKEN = "0x0000000005aCa17e8bd5779Fc87E13cb433aEd24"; // NUKE
+  const RPC_URL = "https://rpc.mainnet.chain.robinhood.com";
+
+  // Breakdown of the total balance across sub-holdings — shares of the whole,
+  // not independent amounts. Edit these percentages (and add/remove entries,
+  // updating the matching row + element id in the HTML) if the split changes.
+  const CATEGORIES = [
+    { id: "catBZ", label: "BZ", pct: 62.5 },
+    { id: "catHZ", label: "HZ", pct: 21 },
+    { id: "catUZ", label: "UZ", pct: 16.5 },
+  ];
+  const DEXSCREENER_URL = (addr) => `https://api.dexscreener.com/latest/dex/tokens/${addr}`;
+
+  const SEL_BALANCE_OF = "70a08231";
+  const SEL_DECIMALS   = "313ce567";
+  const SEL_SYMBOL     = "95d89b41";
+
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, fallback){ try{ return localStorage.getItem(k) || fallback; }catch(e){ return fallback; } },
+    set(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+  };
+
+  let state = {
+    wallet: store.get("rhc_wallet", DEFAULT_WALLET),
+    token: store.get("rhc_token", DEFAULT_TOKEN),
+    priceToken: store.get("rhc_price_token", DEFAULT_PRICE_TOKEN),
+  };
+
+  function short(addr){
+    if(!addr || addr.length < 10) return addr || "";
+    return addr.slice(0,6) + "…" + addr.slice(-4);
+  }
+
+  let fxRate = null; // USD -> GBP, fetched once per load
+
+  async function fetchFxRate(){
+    // Try a few free, keyless FX APIs in order — one being briefly down
+    // shouldn't leave the whole dashboard stuck on USD.
+    const sources = [
+      async () => {
+        const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=GBP");
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return data?.rates?.GBP;
+      },
+      async () => {
+        const res = await fetch("https://open.er-api.com/v6/latest/USD");
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return data?.rates?.GBP;
+      },
+      async () => {
+        const res = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return data?.rates?.GBP;
+      },
+    ];
+
+    for(const tryFetch of sources){
+      try{
+        const rate = await tryFetch();
+        if(typeof rate === "number" && rate > 0){
+          fxRate = rate;
+          return;
+        }
+      }catch(e){ /* try next source */ }
+    }
+    fxRate = null; // all sources failed
+  }
+
+  function fmtUsd(v, decimals=2){
+    // Converts a USD figure to GBP using the fetched rate. If the rate never
+    // loaded, falls back to showing the raw USD figure so the app still works.
+    if(v === null || v === undefined || isNaN(v)) return "n/a";
+    if(fxRate === null){
+      return "$" + Number(v).toLocaleString("en-US", {minimumFractionDigits:decimals, maximumFractionDigits:decimals}) + "*";
+    }
+    const gbp = Number(v) * fxRate;
+    return "£" + gbp.toLocaleString("en-GB", {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
+  }
+  function fmtNum(v, decimals=4){
+    if(v === null || v === undefined || isNaN(v)) return "n/a";
+    return Number(v).toLocaleString("en-US", {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
+  }
+  function fmtPct(v){
+    if(v === null || v === undefined || isNaN(v)) return "n/a";
+    const n = Number(v);
+    return (n>=0?"+":"") + n.toFixed(2) + "%";
+  }
+
+  async function rpcCall(to, dataHex){
+    const res = await fetch(RPC_URL, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({jsonrpc:"2.0", id:1, method:"eth_call", params:[{to, data:"0x"+dataHex}, "latest"]})
+    });
+    if(!res.ok) throw new Error(`RPC HTTP ${res.status}`);
+    const json = await res.json();
+    if(json.error) throw new Error("RPC error: " + (json.error.message || JSON.stringify(json.error)));
+    return json.result || "0x";
+  }
+
+  function padAddress(addr){
+    return addr.toLowerCase().replace("0x","").padStart(64,"0");
+  }
+
+  async function getDecimals(token){
+    try{
+      const raw = await rpcCall(token, SEL_DECIMALS);
+      return parseInt(raw, 16);
+    }catch(e){ return 18; }
+  }
+
+  async function getSymbol(token){
+    try{
+      const raw = await rpcCall(token, SEL_SYMBOL);
+      const hex = raw.startsWith("0x") ? raw.slice(2) : raw;
+      if(hex.length < 128) return null;
+      const len = parseInt(hex.slice(64,128), 16);
+      const strHex = hex.slice(128, 128 + len*2);
+      const bytes = strHex.match(/.{1,2}/g)?.map(b => parseInt(b,16)) || [];
+      const str = new TextDecoder().decode(new Uint8Array(bytes)).trim();
+      return str || null;
+    }catch(e){ return null; }
+  }
+
+  async function getBalance(token, wallet, decimals){
+    const raw = await rpcCall(token, SEL_BALANCE_OF + padAddress(wallet));
+    const rawInt = BigInt(raw === "0x" ? "0x0" : raw);
+    return Number(rawInt) / Math.pow(10, decimals);
+  }
+
+  async function getPricePair(token){
+    const res = await fetch(DEXSCREENER_URL(token), {headers:{"Accept":"application/json"}});
+    if(!res.ok) throw new Error(`DexScreener HTTP ${res.status}`);
+    const data = await res.json();
+    const pairs = data.pairs || [];
+    if(pairs.length === 0) return null;
+    const liq = (p) => { try{ return parseFloat(p?.liquidity?.usd || 0) }catch(e){ return 0 } };
+    const preferred = pairs.filter(p => p.chainId === "robinhood");
+    const pool = preferred.length ? preferred : pairs;
+    return pool.reduce((best, p) => liq(p) > liq(best) ? p : best, pool[0]);
+  }
+
+  function setStatus(msg, isError){
+    const el = $("statusLine");
+    el.textContent = msg || "";
+    el.classList.toggle("error", !!isError);
+  }
+
+  function setLive(ok){
+    $("liveDot").classList.toggle("stale", !ok);
+  }
+
+  function renderOverview(balance, symbol, pair){
+    const priceUsd = pair ? parseFloat(pair.priceUsd) : null;
+    const total = (priceUsd !== null && !isNaN(priceUsd)) ? balance * priceUsd : null;
+
+    $("symLabel").textContent = symbol || "TOKEN";
+    $("heroPrice").classList.remove("skeleton");
+    $("heroPrice").textContent = priceUsd !== null ? fmtUsd(priceUsd, 8) : "n/a";
+
+    const change24 = pair?.priceChange?.h24;
+    const deltaEl = $("heroDelta");
+    if(change24 !== undefined && change24 !== null){
+      const up = parseFloat(change24) >= 0;
+      deltaEl.className = "delta " + (up ? "up" : "down");
+      deltaEl.innerHTML = `<span class="lbl">24h</span> ${up?"▲":"▼"} ${fmtPct(change24)}`;
+    } else {
+      deltaEl.className = "delta";
+      deltaEl.innerHTML = `<span class="lbl">24h</span> n/a`;
+    }
+
+    $("ovBalance").textContent = `${fmtNum(balance,6)} ${symbol||""}`;
+    $("ovPrice").textContent = priceUsd !== null ? fmtUsd(priceUsd,8) : "n/a";
+    $("ovTotal").textContent = total !== null ? fmtUsd(total,2) : "n/a";
+    $("ovMcap").textContent = pair?.marketCap !== undefined ? fmtUsd(pair.marketCap,2) : "n/a";
+    $("ovFdv").textContent = pair?.fdv !== undefined ? fmtUsd(pair.fdv,2) : "n/a";
+    $("ovLiq").textContent = pair?.liquidity?.usd !== undefined ? fmtUsd(pair.liquidity.usd,2) : "n/a";
+
+    $("ovWalletChip").textContent = short(state.wallet);
+    $("ovWalletChip").title = state.wallet;
+    $("ovTokenChip").textContent = short(state.token);
+    $("ovTokenChip").title = state.token;
+
+    CATEGORIES.forEach(cat => {
+      const amount = balance * (cat.pct / 100);
+      const usd = (priceUsd !== null && !isNaN(priceUsd)) ? amount * priceUsd : null;
+      const el = $(cat.id);
+      if(el){
+        el.textContent = `${fmtNum(amount, 4)} ${symbol||""}` + (usd !== null ? ` (${fmtUsd(usd,2)})` : "");
+      }
+    });
+
+    const pctSum = CATEGORIES.reduce((s,c) => s + c.pct, 0);
+    if(Math.abs(pctSum - 100) > 0.01){
+      setStatus(`Note: category percentages sum to ${pctSum}%, not 100% — check CATEGORIES in the script.`, true);
+    }
+
+    const pricedViaEl = $("ovPricedVia");
+    if(state.priceToken.toLowerCase() !== state.token.toLowerCase()){
+      pricedViaEl.style.display = "";
+      pricedViaEl.textContent = pair
+        ? `Priced via ${pair.baseToken?.symbol || short(state.priceToken)} pool, not the staked token directly.`
+        : `No pool found for the price-source token either.`;
+    } else {
+      pricedViaEl.style.display = "none";
+    }
+  }
+
+  function row(k, v){
+    return `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+  }
+
+  function renderFull(pair){
+    if(!pair){
+      $("fullContent").innerHTML = `<div class="status error">No DexScreener pair found for this token address.</div>`;
+      return;
+    }
+    const base = pair.baseToken || {};
+    const quote = pair.quoteToken || {};
+    const liq = pair.liquidity || {};
+    const vol = pair.volume || {};
+    const chg = pair.priceChange || {};
+    const txns = pair.txns || {};
+    const info = pair.info || {};
+    const websites = info.websites || [];
+    const socials = info.socials || [];
+
+    let html = "";
+
+    html += `<div class="section-title">Pair</div>`;
+    html += row("Pair address", `<span title="${pair.pairAddress||''}">${short(pair.pairAddress||'')}</span>`);
+    html += row("Chain", pair.chainId || "n/a");
+    html += row("DEX", pair.dexId || "n/a");
+    html += row("Labels", (pair.labels||[]).join(", ") || "n/a");
+
+    html += `<div class="section-title">Base token</div>`;
+    html += row("Name", base.name || "n/a");
+    html += row("Symbol", base.symbol || "n/a");
+    html += row("Address", `<span title="${base.address||''}">${short(base.address||'')}</span>`);
+
+    html += `<div class="section-title">Quote token</div>`;
+    html += row("Name", quote.name || "n/a");
+    html += row("Symbol", quote.symbol || "n/a");
+    html += row("Address", `<span title="${quote.address||''}">${short(quote.address||'')}</span>`);
+
+    html += `<div class="section-title">Price</div>`;
+    html += row("USD", pair.priceUsd !== undefined ? fmtUsd(pair.priceUsd,8) : "n/a");
+    html += row("Native (quote)", pair.priceNative !== undefined ? fmtNum(pair.priceNative,10) : "n/a");
+
+    html += `<div class="section-title">Price change</div>`;
+    ["m5","h1","h6","h24"].forEach(k => html += row(k, fmtPct(chg[k])));
+
+    html += `<div class="section-title">Volume (USD)</div>`;
+    ["m5","h1","h6","h24"].forEach(k => html += row(k, fmtUsd(vol[k],2)));
+
+    html += `<div class="section-title">Transactions</div>`;
+    ["m5","h1","h6","h24"].forEach(k => {
+      const t = txns[k] || {};
+      html += row(k, `${t.buys ?? "n/a"} buys / ${t.sells ?? "n/a"} sells`);
+    });
+
+    html += `<div class="section-title">Liquidity</div>`;
+    html += row("USD", fmtUsd(liq.usd,2));
+    html += row("Base", `${fmtNum(liq.base,4)} ${base.symbol||""}`);
+    html += row("Quote", `${fmtNum(liq.quote,4)} ${quote.symbol||""}`);
+
+    html += `<div class="section-title">Valuation</div>`;
+    html += row("Market cap", fmtUsd(pair.marketCap,2));
+    html += row("FDV", fmtUsd(pair.fdv,2));
+
+    if(pair.pairCreatedAt){
+      const d = new Date(pair.pairCreatedAt);
+      html += `<div class="section-title">Meta</div>`;
+      html += row("Pair created", d.toLocaleString());
+    }
+
+    if(pair.url || websites.length || socials.length){
+      html += `<div class="section-title">Links</div><div class="links" style="display:flex; flex-direction:column; gap:6px; padding-top:4px;">`;
+      if(pair.url) html += `<a href="${pair.url}" target="_blank" rel="noopener">DexScreener page</a>`;
+      websites.forEach(w => { if(w.url) html += `<a href="${w.url}" target="_blank" rel="noopener">${w.label||"Website"}</a>`; });
+      socials.forEach(s => { if(s.url) html += `<a href="${s.url}" target="_blank" rel="noopener">${s.type||"Social"}</a>`; });
+      html += `</div>`;
+    }
+
+    $("fullContent").innerHTML = html;
+  }
+
+  async function loadAll(){
+    const btn = $("refreshBtn");
+    btn.classList.add("spin");
+    setStatus("Fetching balance and price…");
+    $("heroPrice").classList.add("skeleton");
+
+    try{
+      const [decimals, symbol] = await Promise.all([
+        getDecimals(state.token),
+        getSymbol(state.token),
+        fetchFxRate()
+      ]);
+      const balance = await getBalance(state.token, state.wallet, decimals);
+      let pair = await getPricePair(state.priceToken);
+      if(!pair && state.priceToken !== state.token){
+        // fall back to the balance token itself in case it does have its own pair
+        pair = await getPricePair(state.token);
+      }
+
+      renderOverview(balance, symbol, pair);
+      renderFull(pair);
+
+      setLive(true);
+      const isFileProtocol = window.location.protocol === "file:";
+      let updatedMsg = "Updated " + new Date().toLocaleTimeString();
+      if(fxRate === null){
+        updatedMsg += isFileProtocol
+          ? " — GBP unavailable: opened as a local file, and FX APIs reject that (see note below)"
+          : " — GBP rate unavailable, showing USD (*)";
+      } else {
+        updatedMsg += ` — £1 = $${(1/fxRate).toFixed(4)}`;
+      }
+      $("updatedLine").textContent = updatedMsg;
+      setStatus("");
+    }catch(err){
+      setLive(false);
+      $("heroPrice").classList.remove("skeleton");
+      setStatus("Couldn't load: " + err.message + ". If this keeps happening on iPhone, it may be a cross-origin (CORS) block from Safari — try again, or open this same file from a small static host instead of directly from Files.", true);
+    }finally{
+      btn.classList.remove("spin");
+    }
+  }
+
+  // tabs
+  function selectTab(which){
+    const isOverview = which === "overview";
+    $("tabBtnOverview").classList.toggle("active", isOverview);
+    $("tabBtnFull").classList.toggle("active", !isOverview);
+    $("tabBtnOverview").setAttribute("aria-selected", isOverview);
+    $("tabBtnFull").setAttribute("aria-selected", !isOverview);
+    $("panelOverview").classList.toggle("active", isOverview);
+    $("panelFull").classList.toggle("active", !isOverview);
+  }
+  $("tabBtnOverview").addEventListener("click", () => selectTab("overview"));
+  $("tabBtnFull").addEventListener("click", () => selectTab("full"));
+
+  // refresh
+  $("refreshBtn").addEventListener("click", loadAll);
+
+  // copy address chips
+  function wireCopy(el, getVal){
+    el.addEventListener("click", () => {
+      const val = getVal();
+      if(navigator.clipboard) navigator.clipboard.writeText(val).catch(()=>{});
+      const original = el.textContent;
+      el.textContent = "Copied";
+      setTimeout(() => { el.textContent = short(val); }, 900);
+    });
+  }
+  wireCopy($("ovWalletChip"), () => state.wallet);
+  wireCopy($("ovTokenChip"), () => state.token);
+
+  // edit form
+  $("editToggle").addEventListener("click", () => {
+    const form = $("editForm");
+    const opening = !form.classList.contains("open");
+    form.classList.toggle("open");
+    if(opening){
+      $("inWallet").value = state.wallet;
+      $("inToken").value = state.token;
+      $("inPriceToken").value = state.priceToken;
+    }
+  });
+  $("applyBtn").addEventListener("click", () => {
+    const w = $("inWallet").value.trim();
+    const t = $("inToken").value.trim();
+    let p = $("inPriceToken").value.trim();
+    if(!p) p = t;
+    const isAddr = (s) => /^0x[0-9a-fA-F]{40}$/.test(s);
+    if(!isAddr(w) || !isAddr(t) || !isAddr(p)){
+      setStatus("That doesn't look like a valid 0x… address (need 40 hex characters after 0x).", true);
+      return;
+    }
+    state.wallet = w; state.token = t; state.priceToken = p;
+    store.set("rhc_wallet", w); store.set("rhc_token", t); store.set("rhc_price_token", p);
+    $("editForm").classList.remove("open");
+    loadAll();
+  });
+  $("resetBtn").addEventListener("click", () => {
+    state.wallet = DEFAULT_WALLET; state.token = DEFAULT_TOKEN; state.priceToken = DEFAULT_PRICE_TOKEN;
+    store.set("rhc_wallet", DEFAULT_WALLET); store.set("rhc_token", DEFAULT_TOKEN); store.set("rhc_price_token", DEFAULT_PRICE_TOKEN);
+    $("inWallet").value = DEFAULT_WALLET; $("inToken").value = DEFAULT_TOKEN; $("inPriceToken").value = DEFAULT_PRICE_TOKEN;
+    loadAll();
+  });
+
+  // init
+  (function(){
+    if(window.location.protocol === "file:"){
+      const note = $("fileProtoNote");
+      note.style.display = "";
+      note.innerHTML = `Running as a local file — currency conversion needs a real page origin to work reliably. Serve this folder over HTTP (e.g. <code>python3 -m http.server 8000</code>, then open <code>http://localhost:8000/dashboard.html</code>) or host it on a static site, and the £ conversion will work every time instead of falling back to $*.`;
+    }
+  })();
+  loadAll();
+})();
+</script>
+</body>
+</html>
