@@ -151,9 +151,12 @@
       <span class="sym" id="symLabel">—</span>
       <span class="chain-tag">· Robinhood Chain</span>
     </div>
-    <button class="refresh-btn" id="refreshBtn" aria-label="Refresh">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-    </button>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button class="refresh-btn" id="currencyToggle" aria-label="Toggle currency" style="font-family:var(--mono); font-size:12px; font-weight:600; width:auto; padding:0 10px;">£</button>
+      <button class="refresh-btn" id="refreshBtn" aria-label="Refresh">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </div>
   </div>
   <div class="subline" id="updatedLine">loading…</div>
 
@@ -224,7 +227,7 @@
   <div class="status" id="fileProtoNote" style="display:none;"></div>
 
   <footer>
-    Balance read directly from Robinhood Chain's public RPC via <code>eth_call</code>. Price and market data from DexScreener, picking the highest-liquidity pool for this token. USD figures converted to GBP live via frankfurter.app; if that's unreachable, figures fall back to USD marked with *. Numbers reflect a single pool snapshot — treat as an estimate, not a settled valuation.
+    Balance read directly from Robinhood Chain's public RPC via <code>eth_call</code>. Price and market data from DexScreener, picking the highest-liquidity pool for this token. USD figures converted to GBP live via frankfurter.app; if that's unreachable, figures fall back to USD marked with *. Use the £/$ button to switch manually. Numbers reflect a single pool snapshot — treat as an estimate, not a settled valuation.
   </footer>
 </div>
 
@@ -265,6 +268,10 @@
     wallet: store.get("rhc_wallet", DEFAULT_WALLET),
     token: store.get("rhc_token", DEFAULT_TOKEN),
     priceToken: store.get("rhc_price_token", DEFAULT_PRICE_TOKEN),
+    currency: store.get("rhc_currency", "GBP"), // "GBP" or "USD"
+    lastBalance: null,
+    lastSymbol: null,
+    lastPair: null,
   };
 
   function short(addr){
@@ -311,9 +318,13 @@
   }
 
   function fmtUsd(v, decimals=2){
-    // Converts a USD figure to GBP using the fetched rate. If the rate never
-    // loaded, falls back to showing the raw USD figure so the app still works.
+    // Formats a USD figure in whichever currency the toggle is set to.
+    // GBP mode converts using the fetched rate, falling back to USD marked
+    // with * if the rate never loaded. USD mode always shows the raw figure.
     if(v === null || v === undefined || isNaN(v)) return "n/a";
+    if(state.currency === "USD"){
+      return "$" + Number(v).toLocaleString("en-US", {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
+    }
     if(fxRate === null){
       return "$" + Number(v).toLocaleString("en-US", {minimumFractionDigits:decimals, maximumFractionDigits:decimals}) + "*";
     }
@@ -529,6 +540,21 @@
     $("fullContent").innerHTML = html;
   }
 
+  function updatedLineText(){
+    const isFileProtocol = window.location.protocol === "file:";
+    let msg = "Updated " + new Date().toLocaleTimeString();
+    if(state.currency === "USD"){
+      msg += " — showing USD";
+    } else if(fxRate === null){
+      msg += isFileProtocol
+        ? " — GBP unavailable: opened as a local file, and FX APIs reject that (see note below)"
+        : " — GBP rate unavailable, showing USD (*)";
+    } else {
+      msg += ` — £1 = $${(1/fxRate).toFixed(4)}`;
+    }
+    return msg;
+  }
+
   async function loadAll(){
     const btn = $("refreshBtn");
     btn.classList.add("spin");
@@ -550,18 +576,12 @@
 
       renderOverview(balance, symbol, pair);
       renderFull(pair);
+      state.lastBalance = balance;
+      state.lastSymbol = symbol;
+      state.lastPair = pair;
 
       setLive(true);
-      const isFileProtocol = window.location.protocol === "file:";
-      let updatedMsg = "Updated " + new Date().toLocaleTimeString();
-      if(fxRate === null){
-        updatedMsg += isFileProtocol
-          ? " — GBP unavailable: opened as a local file, and FX APIs reject that (see note below)"
-          : " — GBP rate unavailable, showing USD (*)";
-      } else {
-        updatedMsg += ` — £1 = $${(1/fxRate).toFixed(4)}`;
-      }
-      $("updatedLine").textContent = updatedMsg;
+      $("updatedLine").textContent = updatedLineText();
       setStatus("");
     }catch(err){
       setLive(false);
@@ -584,6 +604,25 @@
   }
   $("tabBtnOverview").addEventListener("click", () => selectTab("overview"));
   $("tabBtnFull").addEventListener("click", () => selectTab("full"));
+
+  // currency toggle
+  function updateCurrencyButtonLabel(){
+    $("currencyToggle").textContent = state.currency === "GBP" ? "£" : "$";
+  }
+  updateCurrencyButtonLabel();
+  $("currencyToggle").addEventListener("click", () => {
+    state.currency = state.currency === "GBP" ? "USD" : "GBP";
+    store.set("rhc_currency", state.currency);
+    updateCurrencyButtonLabel();
+    if(state.lastBalance !== null){
+      // Re-render from the cached fetch — instant, no network calls.
+      renderOverview(state.lastBalance, state.lastSymbol, state.lastPair);
+      renderFull(state.lastPair);
+      $("updatedLine").textContent = updatedLineText();
+    } else {
+      loadAll();
+    }
+  });
 
   // refresh
   $("refreshBtn").addEventListener("click", loadAll);
